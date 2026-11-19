@@ -101,5 +101,10 @@ expectation, check ground, threshold and channel mapping before concluding the D
   continuous monitoring, loop short captures.
 - Analog and digital share the same 16 physical channels; enabling analog on a channel does
   not stop its digital capture, but it lowers the maximum sample rates.
-- This skill was written from the published API and has not been verified against hardware;
-  see `references/debugging.md` for what to confirm on the first real run.
+- Verified on 2026-11-18 against Logic 2 2.4.50 using the built-in simulator (`--sim`): `app start`,
+  `info`, timed and triggered `capture`, `--stats`, Async Serial decode, `load` and `stats`.
+  Not yet verified with a physical Saleae attached; see `references/debugging.md` for what to
+  confirm on the first real run.
+- Logic 2 refuses `add_analyzer` while a capture is running, so `sl.py` adds analyzers after
+  the capture ends; the decode still completes and exports.
+- On macOS Logic 2 installs as `/Applications/Saleae Logic.app`.

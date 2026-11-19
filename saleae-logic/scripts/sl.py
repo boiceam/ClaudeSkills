@@ -21,9 +21,11 @@ import threading
 import time
 
 DEFAULT_PORT = 10430
-MAC_APP = "/Applications/Logic.app/Contents/MacOS/Logic"
+MAC_APP = "/Applications/Saleae Logic.app/Contents/MacOS/Logic"
 APP_CANDIDATES = [
     MAC_APP,
+    "/Applications/Logic.app/Contents/MacOS/Logic",
+    os.path.expanduser("~/Applications/Saleae Logic.app/Contents/MacOS/Logic"),
     os.path.expanduser("~/Applications/Logic.app/Contents/MacOS/Logic"),
     r"C:\Program Files\Logic\Logic.exe",
     os.path.expanduser("~/Downloads/Logic-2.AppImage"),
@@ -329,15 +331,6 @@ def cmd_capture(a):
                  hint="Sample rate must be one Logic 2 offers for this channel set (16 digital channels "
                  "cap at about 100 MS/s; analog rate drops as analog channels are added). Try a lower --rate.")
         with cap:
-            # Analyzers added before wait() decode live and are ready right after.
-            handles = []
-            for name, label, settings in analyzers:
-                try:
-                    handles.append((label, cap.add_analyzer(name, label=label, settings=settings)))
-                except Exception as e:  # noqa
-                    fail("add_analyzer(%r) failed: %s" % (name, e),
-                         hint="Name and setting keys/values must match the Logic 2 UI text exactly "
-                         "(case, spaces, units). Open the analyzer in the Logic 2 UI to copy its labels.")
             t0 = time.time()
             if a.timeout and not timed:
                 th = threading.Thread(target=cap.wait, daemon=True)
@@ -355,6 +348,15 @@ def cmd_capture(a):
             else:
                 cap.wait()
             result["capture_wall_s"] = round(time.time() - t0, 3)
+            # Logic 2 refuses add_analyzer while a capture is running, so add after it ends.
+            handles = []
+            for name, label, settings in analyzers:
+                try:
+                    handles.append((label, cap.add_analyzer(name, label=label, settings=settings)))
+                except Exception as e:  # noqa
+                    fail("add_analyzer(%r) failed: %s" % (name, e),
+                         hint="Name and setting keys/values must match the Logic 2 UI text exactly "
+                         "(case, spaces, units). Open the analyzer in the Logic 2 UI to copy its labels.")
 
             sal = os.path.join(out, "capture.sal")
             if not a.no_save:
