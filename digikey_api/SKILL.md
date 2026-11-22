@@ -27,7 +27,7 @@ python3 <skill-dir>/scripts/dk.py <command> [options]
 | Verify credentials work | `dk.py auth-check` |
 | Keyword search | `dk.py search "10k 0603 1%" --limit 5 --in-stock --qty 100` |
 | One part (DK PN or MPN) | `dk.py part RC0603FR-0710KL --qty 250` |
-| Match a BOM CSV | `dk.py bom-match bom.csv --boards 10 --overage 10 --extra 2` |
+| Match a BOM CSV | `dk.py bom-match bom.csv --boards 10` (board count is mandatory; overage and the 100-piece rule are on by default) |
 | Digi-Key bulk-upload CSV | `dk.py list-csv bom.digikey_match.json [--include-review]` |
 | Log in for account writes (once) | `dk.py login`, then `dk.py login --url '<redirected url>'` |
 | Create a MyList | `dk.py mylist bom.digikey_match.json --name "Rev B build" [--confirm]` |
@@ -52,8 +52,11 @@ deletes them.
 
 ## Workflow: BOM to order list
 
-1. **Match.** Ask for quantity of boards, and whether to add overage (percent) or spares
-   (`--extra`). Then `bom-match`. The BOM must be a CSV with a quantity column and an MPN or
+1. **Match.** **Always ask the user how many boards to order for** before running
+   `bom-match`, even if an earlier list in the conversation used some number, unless they
+   state it in this request. `--boards` has no default and the command fails without it.
+   Do not ask about overage or minimums: the quantity rules below are the defaults. Then
+   `bom-match`. The BOM must be a CSV with a quantity column and an MPN or
    Digi-Key PN column (headers are auto-detected; use `--map qty=Qty mpn='Mfr Part'` if not).
    Duplicate part numbers are merged. It writes `<bom>.digikey_match.json` and prints a
    summary. Calls are throttled (about 0.55 s each), so 100 lines take about a minute.
@@ -71,6 +74,26 @@ deletes them.
    `--include-review` only for lines the user has accepted.
 4. Tell the user where to find it (MyLists on digikey.com, or the CSV path) and that they
    place the order themselves.
+
+## Default quantity rules
+
+`bom-match` applies these to every line, in this order. Each line's `order_need` is what the
+build consumes (per-board quantity x boards, plus `--extra`); `order_qty` is what gets
+ordered; `qty_notes` says which rule changed it.
+
+1. **10% overage, capped at $5 per line.** The quantity is raised by 10% (rounded up) only if
+   that adds no more than 5.00 (account currency) to the line's extended price. Expensive
+   lines (ICs, relays, modules) therefore stay at the exact need; `qty_notes` records
+   "overage skipped" with the amount. Change with `--overage PCT` and `--overage-max-cost N`;
+   `--overage 0` turns it off.
+2. **100-piece minimum for cheap cut-tape parts.** A line bought as cut tape whose unit price
+   at 100 pieces is under $0.10 is raised to 100 (if 100 are in stock). The test uses the
+   100-piece price, not the single-piece price, because almost nothing is under $0.10 at
+   quantity 1. Change with `--cheap-min N` and `--cheap-price P`; `--cheap-min 0` turns it off.
+
+Tell the user both rules were applied, how many lines each one changed, and which lines had
+the overage skipped. Use other values only when the user asks. When you add alternates by
+hand (see below), apply the same two rules to them yourself.
 
 ## Things to know
 
@@ -136,7 +159,7 @@ different MPN is their call, so list every swap in the report with what differs.
 The offline suite (`python3 tests/test_offline.py`) exercises token handling, search,
 BOM merging and matching, CSV export, 3-legged login and MyList creation against a local fake
 server. Verified against the live API on 2026-11-22: `auth-check`, `part`, `search`,
-`bom-match` (47-line BOM, 52 calls), `list-csv`, `login` (with `https://localhost` as the
+`bom-match` (47-line BOM, 52 calls; again with the default quantity rules), `list-csv`, `login` (with `https://localhost` as the
 redirect URI) and `mylist --confirm` (47 parts, created in one call). **Not yet verified**:
 how the created list looks on digikey.com (quantities, pack type chosen), and uploading the
 `list-csv` file through the site's bulk-add page. Remaining open items are in

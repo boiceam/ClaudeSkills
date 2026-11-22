@@ -472,13 +472,16 @@ def cmd_part(a):
 
 
 def cmd_bom_match(a):
+    if not a.boards or a.boards < 1:
+        fail("--boards is required.", "Ask the user how many boards to order for; there is no default.")
     cfg = load_cfg()
     tok = two_legged_token(cfg)
     lines = bom_lines(a.bom, a.map)
     results, summary = [], {"matched": 0, "needs_review": 0, "not_found": 0}
     total = 0.0
     for i, ln in enumerate(lines, 1):
-        need = order_qty(ln["qty"], a.boards, a.overage, a.extra)
+        need = order_qty(ln["qty"], a.boards, 0, a.extra)          # what the build consumes
+        want = order_qty(ln["qty"], a.boards, a.overage, a.extra)  # with the overage
         key = ln["dkpn"] or ln["mpn"]
         log("[%d/%d] %s" % (i, len(lines), key))
         p, cands = lookup(cfg, tok, key)
@@ -493,6 +496,28 @@ def cmd_bom_match(a):
             results.append(r)
             continue
         v, oq, note = pick_variation(p, need)
+        qty_notes = []
+        if v and want > need:
+            # Overage is applied only when it is cheap for this line.
+            v2, oq2, note2 = pick_variation(p, want)
+            added = (v2["ext_price"] - v["ext_price"]) if v2 else None
+            if v2 and added <= a.overage_max_cost + 1e-9:
+                v, oq, note = v2, oq2, note2
+                qty_notes.append("overage %g%%: %d -> %d" % (a.overage, need, want))
+            elif v2:
+                qty_notes.append("overage skipped: %d more would add %.2f (limit %.2f)" % (want - need, added, a.overage_max_cost))
+            else:
+                qty_notes.append("overage skipped: not enough stock for %d" % want)
+        if v and a.cheap_min and oq < a.cheap_min and (v.get("package") or "").lower().startswith("cut tape"):
+            # Cheap cut-tape parts are bought in a round quantity: the price break usually
+            # makes 100 pieces cost little more than the handful needed.
+            p_at_min = unit_price_at(v, a.cheap_min)
+            stock = v.get("stock")
+            if p_at_min is not None and p_at_min < a.cheap_price and (stock is None or stock >= a.cheap_min):
+                qty_notes.append("raised to %d: under %.2f each at that quantity (was %d)" % (a.cheap_min, a.cheap_price, oq))
+                oq = a.cheap_min
+                v = dict(v, unit_price=p_at_min, ext_price=round(p_at_min * oq, 4))
+        r["qty_notes"] = qty_notes
         r.update(mpn=p["mpn"], manufacturer=p["manufacturer"], description=p["description"],
                  part_status=p["status"], datasheet=p["datasheet"])
         if ln["mpn"] and p["mpn"] and ln["mpn"].lower() != p["mpn"].lower():
@@ -513,7 +538,9 @@ def cmd_bom_match(a):
             summary[r["status"]] += 1
         r["flags"] = flags
         results.append(r)
-    out = {"bom": os.path.abspath(a.bom), "boards": a.boards, "overage_pct": a.overage, "extra_per_line": a.extra,
+    out = {"bom": os.path.abspath(a.bom), "boards": a.boards, "overage_pct": a.overage,
+           "overage_max_cost": a.overage_max_cost, "cheap_min": a.cheap_min, "cheap_price": a.cheap_price,
+           "extra_per_line": a.extra,
            "currency": cfg["currency"], "estimated_total": round(total, 2), "summary": summary, "lines": results}
     path = a.out or os.path.splitext(os.path.abspath(a.bom))[0] + ".digikey_match.json"
     with open(path, "w") as f:
@@ -644,8 +671,16 @@ def main():
 
     p = sub.add_parser("bom-match", help="resolve a BOM CSV to orderable Digi-Key parts")
     p.add_argument("bom")
-    p.add_argument("--boards", type=int, default=1)
-    p.add_argument("--overage", type=float, default=0.0, help="percent extra per line")
+    p.add_argument("--boards", type=int, default=None,
+                   help="number of boards to build; always ask the user, there is no default")
+    p.add_argument("--overage", type=float, default=10.0,
+                   help="percent extra per line (default 10); applied to a line only if it adds no more than --overage-max-cost")
+    p.add_argument("--overage-max-cost", type=float, default=5.0,
+                   help="most the overage may add to one line, in the account currency (default 5)")
+    p.add_argument("--cheap-min", type=int, default=100,
+                   help="order at least this many of a cut-tape part priced under --cheap-price each at this quantity (default 100; 0 disables)")
+    p.add_argument("--cheap-price", type=float, default=0.10,
+                   help="unit-price threshold for --cheap-min (default 0.10)")
     p.add_argument("--extra", type=int, default=0, help="spare pieces added to every line")
     p.add_argument("--map", nargs="*", help="column overrides, e.g. qty=Qty mpn='Mfr Part'")
     p.add_argument("--out")

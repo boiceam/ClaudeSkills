@@ -30,10 +30,24 @@ bom = os.path.join(tmp, "bom.csv")
 open(bom, "w").write("Designator,Qty,Manufacturer Part Number,Description\n"
                       "R1,2,RC0603FR-0710KL,10k\nR2,3,RC0603FR-0710KL,10k\n"
                       "U1,1,LM358DR,opamp\nU2,1,NOPE123,missing\n")
-m = run("bom-match", bom, "--boards", "10", "--overage", "10")
+run("bom-match", bom, ok=False)  # the number of boards is mandatory
+# quantity rules off: need only
+m = run("bom-match", bom, "--boards", "10", "--overage", "0", "--cheap-min", "0")
+assert {l["bom_mpn"]: l for l in m["lines"]}["RC0603FR-0710KL"]["order_qty"] == 50
+# 10% overage (default) applies when it adds no more than the per-line limit...
+m = run("bom-match", bom, "--boards", "10", "--cheap-min", "0")
+assert {l["bom_mpn"]: l for l in m["lines"]}["RC0603FR-0710KL"]["order_qty"] == 55
+# ...and is skipped when it would add more
+m = run("bom-match", bom, "--boards", "10", "--cheap-min", "0", "--overage-max-cost", "0.1")
+ln = {l["bom_mpn"]: l for l in m["lines"]}["RC0603FR-0710KL"]
+assert ln["order_qty"] == 50 and "overage skipped" in ln["qty_notes"][0]
+# defaults: overage, then cheap cut-tape parts are raised to 100
+m = run("bom-match", bom, "--boards", "10")
 by = {l["bom_mpn"]: l for l in m["lines"]}
 assert len(m["lines"]) == 3, "duplicate MPN lines must merge"
-assert by["RC0603FR-0710KL"]["order_need"] == 55 and by["RC0603FR-0710KL"]["status"] == "matched"
+r10k = by["RC0603FR-0710KL"]
+assert r10k["order_need"] == 50 and r10k["order_qty"] == 100 and r10k["status"] == "matched"
+assert r10k["unit_price"] == 0.02 and len(r10k["qty_notes"]) == 2
 assert by["LM358DR"]["status"] == "needs_review" and by["NOPE123"]["status"] == "not_found"
 
 c = run("list-csv", m["match_file"])
@@ -44,6 +58,6 @@ assert run("mylist", m["match_file"], "--name", "t1")["dry_run"]
 run("mylist", m["match_file"], "--name", "t1", "--confirm", ok=False)  # not logged in yet
 run("login", "--url", "https://localhost/?code=abc&state=dk")
 r = run("mylist", m["match_file"], "--name", "t1", "--confirm")
-assert r["created"] and fake_digikey.STATE["lists"]["L1"][0]["Quantities"][0]["Quantity"] == 55
+assert r["created"] and fake_digikey.STATE["lists"]["L1"][0]["Quantities"][0]["Quantity"] == 100
 assert "s3cr3t-value" not in json.dumps(run("config"))
 print("all offline tests passed")
