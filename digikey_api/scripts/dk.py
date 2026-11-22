@@ -257,10 +257,14 @@ def unit_price_at(var, qty):
 
 def pick_variation(prod, qty):
     """Cheapest in-stock, non-marketplace variation that can satisfy qty and MOQ.
-    Reels only win when the extended price is lower. Returns (variation, order_qty, note)."""
+    Reels only win when the extended price is lower. Digi-Reel is never picked: its price
+    breaks match cut tape (sometimes a cent lower) but Digi-Key adds a reeling fee per line that
+    the API pricing does not show. Returns (variation, order_qty, note)."""
     best = None
     for v in prod["variations"]:
         if v.get("marketplace"):
+            continue
+        if "digi-reel" in (v.get("package") or "").lower():
             continue
         moq = v.get("moq") or 1
         oq = max(qty, moq)

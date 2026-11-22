@@ -63,6 +63,7 @@ deletes them.
    above need). Never silently substitute a part; a different MPN is the user's call. Show
    money with the currency printed in the output and say it is an estimate from list
    pricing at the quantity break (not their account pricing).
+   **Out-of-stock lines:** if the user wants alternates, see "Finding alternates" below.
 3. **Build the list.** `list-csv` always works and needs no login. `mylist` creates the
    list in their account: run it without `--confirm` first (dry run), show what it will
    create, and only add `--confirm` after the user says yes. It refuses a name that already
@@ -82,8 +83,24 @@ deletes them.
   2 calls per line. The script warns when fewer than 50 daily calls remain; do not loop
   searches needlessly, and prefer `bom-match` over per-line `part` calls.
 - **Variation choice.** The script picks the cheapest in-stock, non-marketplace variation
-  (cut tape, tape and reel, etc.) at the order quantity, respecting minimum order quantity.
-  Mention when a reel is chosen or when it bumped quantity up to the MOQ.
+  (cut tape, bulk, tube, tape and reel) at the order quantity, respecting minimum order
+  quantity. It never picks Digi-Reel, which carries a reeling fee the API prices do not show.
+  Mention when a full reel is chosen or when it bumped quantity up to the MOQ.
+- **Zero stock is real.** An out-of-stock part comes back with `stock_total: null` and
+  `stock: 0` on every variation, and `bom-match` flags it "no in-stock variation covers this
+  quantity". This is not a parsing fault: it was checked against the product page. Expect it
+  often, even for jellybean parts (on a 47-line BOM, 9 lines were at zero, including
+  1N4148W-7-F, BAT54S-7-F and a Panasonic ERJ 100k). Do not assume a well-known alternate is
+  in stock either; check each one.
+- **BOM with both columns.** When the CSV has a Digi-Key PN column as well as an MPN column,
+  `bom-match` looks each line up by the Digi-Key PN. A wrong or guessed DK PN in the BOM
+  therefore shows up as `not_found` or as a different MPN; all 47 hand-collected numbers on
+  the first real BOM resolved.
+- **`part` output.** The price for the suggested buy is at
+  `part.recommended.variation.unit_price` / `ext_price`, not on `recommended` itself.
+- **Do not scrape digikey.com.** The website answers automated fetches with HTTP 429 after a
+  few pages. Use the API for everything; opening one product page in the browser to
+  sanity-check a surprising result is fine.
 - **Search tips.** MPN searches are best. Parametric free text ("10k 0603 1%") returns
   several candidates; show the user the top few rather than picking for them.
 - **Failures.** HTTP 401/403 = credentials, environment or API product not enabled;
@@ -91,10 +108,36 @@ deletes them.
   partial failure; it reports the `list_id` so the user can inspect the list first.
 - See `references/api.md` for endpoints, headers and what is unverified.
 
+## Finding alternates for out-of-stock lines
+
+There is no substitute-search command. Only do this when the user asks for alternates; a
+different MPN is their call, so list every swap in the report with what differs.
+
+1. Pick candidates yourself: same value, rating, tolerance, dielectric and package from
+   another maker, or the same part under another ordering suffix (reel size, `-13` vs `-7`,
+   `-W`), which is the safest swap. Typical in-stock fallbacks seen: Yageo CC-series and
+   KEMET C-series MLCCs, Stackpole RMCF resistors, onsemi for common diodes.
+2. Check each with `dk.py part <MPN> --qty <need>` (one API call each; about half of the
+   first-choice candidates were also out of stock, so try two or three per line in one loop
+   rather than one at a time). Reject anything not `Active`.
+3. For connectors and anything mechanical, say plainly that the footprint and ratings were
+   not checked unless you checked them.
+4. Build the order from the results. `list-csv` and `mylist` only read a match file, and they
+   skip lines without a `dk_pn`. To include the alternates, write a small match file of your
+   own and pass that instead:
+   `{"currency": "USD", "estimated_total": <sum>, "lines": [{"line": 1, "dk_pn": "...",
+   "order_qty": 4, "mpn": "...", "manufacturer": "...", "refs": "C2 C4", "status": "matched",
+   "flags": []}, ...]}`. Those are all the fields the two commands read.
+5. Leave the user's BOM part numbers alone unless they ask; note the alternate against the
+   line instead.
+
 ## Verification status
 
 The offline suite (`python3 tests/test_offline.py`) exercises token handling, search,
 BOM merging and matching, CSV export, 3-legged login and MyList creation against a local fake
-server. Verified against the live API on 2026-11-22: `auth-check` and `part`. **Not yet verified live**:
-`bom-match` on a real BOM, `login` and `mylist`. Check the first real runs against digikey.com;
-open items are in `references/api.md`.
+server. Verified against the live API on 2026-11-22: `auth-check`, `part`, `search`,
+`bom-match` (47-line BOM, 52 calls), `list-csv`, `login` (with `https://localhost` as the
+redirect URI) and `mylist --confirm` (47 parts, created in one call). **Not yet verified**:
+how the created list looks on digikey.com (quantities, pack type chosen), and uploading the
+`list-csv` file through the site's bulk-add page. Remaining open items are in
+`references/api.md`.
