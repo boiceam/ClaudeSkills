@@ -76,6 +76,9 @@ writes numbered files and `<Project> - Milling Setup.txt` to `<project>/outputs/
 | 6 | `mill_holes`: every hole not drilled | Top | T3 corn bit |
 | 7 | `cutout`: board outline with tabs | Top | T3 |
 
+- Steps 4 to 7 need nothing done to the blank between them, so they can be joined into one file
+  with `combine_gcode.py` (the user asked for this on the Moby Tester). `mill_pcb.py` deletes every
+  `.nc` in the output folder when it regenerates, so re-run the combine afterwards.
 - Holes and the cutout are last so the mask does not fill them and the board stays attached to
   the blank through both flips.
 - The origin is Anchor 1 or the blank's front-left corner (pins enabled, see `pins.origin`), or the

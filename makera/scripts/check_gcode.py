@@ -6,7 +6,8 @@
 Static checks only. It does not simulate material or prove the job is safe:
   - every line is one Makera CAM would write (Makera Studio shows no preview otherwise):
     "%", "G90 G21", "T<n> M6", "M7", "S<rpm> M3", G0/G1 moves with feeds on the moves, "M9", "M5", "G28", "M02"
-  - starts with the tool change, then an XY rapid, then spindle on; one tool per file
+  - starts with the tool change, then an XY rapid, then spindle on; a multi-tool file repeats that
+    after each further tool change, with the spindle stopped first
   - first move after the tool change is XY only (never downwards first)
   - every sideways rapid is at or above the travel height; no rapid ends below Z0 except
     re-entering a hole already drilled at the same XY
@@ -58,12 +59,20 @@ def check(path, blank, max_depth, travel=2.0, anchor=False):
         errs.append(f"start is {core[:5]}, expected {want}")
     if core[-3:] != ["M5", "G28", "M2"]:
         errs.append(f"end is {core[-3:]}, expected ['M5', 'G28', 'M2']")
-    if codes.count("M7") != codes.count("M9") or codes.count("M7") > 1:
-        errs.append("air: expected M7 after the tool change and M9 before the spindle stops, or neither")
-    elif "M7" in codes and (codes[2] != "M7" or codes[-4] != "M9"):
-        errs.append("air: M7 must follow the tool change and M9 must precede M5")
-    if codes.count("M6") != 1:
-        errs.append("expected exactly one tool change")
+    if codes.count("M7") != codes.count("M9"):
+        errs.append("air: every M7 needs an M9")
+    for i, k in enumerate(codes):
+        if k == "M7" and codes[i - 1] != "M6":
+            errs.append(f"line {lines[i][0]}: M7 must follow a tool change")
+        if k == "M9" and codes[i + 1] != "M5":
+            errs.append(f"line {lines[i][0]}: M9 must be followed by M5")
+        if k == "M6" and i > 1 and codes[i - 1] != "M5":
+            errs.append(f"line {lines[i][0]}: the spindle must be stopped (M5) before a tool change")
+    if codes.count("M6") < 1:
+        errs.append("no tool change")
+    tools = [s.split()[0] for (_, s), k in zip(lines, codes) if k == "M6"]
+    if any(a == b for a, b in zip(tools, tools[1:])):
+        errs.append("a tool change to the tool already loaded does nothing: " + ", ".join(tools))
     lay = z1.stock_layout(*blank) if blank else None
     ox, oy = lay["origin"] if (lay and anchor) else (0.0, 0.0)      # where the blank's corner is in file coordinates
     pins = [(px + ox, py + oy) for px, py in lay["pins_stock"]] if lay else []
@@ -72,6 +81,9 @@ def check(path, blank, max_depth, travel=2.0, anchor=False):
     drilled, seen_xy, deepest, ext = set(), False, 0.0, [1e9, 1e9, -1e9, -1e9]
     for n, s in lines:
         c = kind(s) or ""
+        if c == "M6":
+            seen_xy = False                # the tool change leaves the spindle over the tool setter
+            pos = {"X": None, "Y": None, "Z": None}
         if c == "M3":
             spindle = True
         elif c == "M5":
@@ -116,7 +128,7 @@ def check(path, blank, max_depth, travel=2.0, anchor=False):
         errs.append(f"deepest cut {deepest} mm is beyond {max_depth} mm")
     if blank and (ext[0] < ox or ext[1] < oy or ext[2] > ox + blank[0] or ext[3] > oy + blank[1]):
         errs.append(f"cuts leave the blank: X {ext[0]:.2f}..{ext[2]:.2f}, Y {ext[1]:.2f}..{ext[3]:.2f}")
-    tool = next((s for _, s in lines if s.endswith("M6")), "?")
+    tool = " + ".join(s for _, s in lines if s.endswith("M6")) or "?"
     return errs, f"{len(lines)} lines, {tool}, cuts X {ext[0]:.1f}..{ext[2]:.1f} Y {ext[1]:.1f}..{ext[3]:.1f}, deepest Z {deepest:.2f}"
 
 

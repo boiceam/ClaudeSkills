@@ -49,8 +49,10 @@ Three rules carry real consequences:
 2. **After the tool change, move XY before Z.** The Z1 measures the tool on the tool setter at the
    back-right of the bed and leaves the spindle there, high up. Z down first brings the bit down
    beside the tool setter (Makera firmware; Makera CAM and Makera's Fusion post both go XY first).
-3. **One tool per file, and every physical bit gets its own number.** `M6` to the tool number
-   already loaded does nothing: no prompt, no length measurement (Makera firmware).
+3. **Every physical bit gets its own tool number.** `M6` to the number already loaded does
+   nothing: no prompt, no length measurement (Makera firmware). The generators write one tool per
+   file; `combine_gcode.py` joins files into one multi-tool file when the stock does not have to be
+   touched between them.
 
 `references/gcode.md` has the supported codes, what the firmware does with each, and the smaller
 layout facts.
@@ -115,6 +117,7 @@ blank can be flipped left to right and land in the same place.
 python3 <skill-dir>/scripts/stock_prep.py                      # once per blank: two dowel holes
 python3 <skill-dir>/scripts/mill_pcb.py "<KiCad project dir>"  # a board's files, from its Gerbers
 python3 <skill-dir>/scripts/check_gcode.py --blank 152x152 --origin anchor1 "<project>/outputs/Milling/"*.nc
+python3 <skill-dir>/scripts/combine_gcode.py -o combined.nc step4.nc step5.nc ...   # optional: one file, several tools
 ```
 
 The user's standing choices: work origin at Anchor 1, the 30 deg 0.2 mm engraving bit for all

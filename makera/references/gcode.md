@@ -43,9 +43,10 @@ Reference: `~/Documents/Projects/Makera/resources/Moby Power Mixer.nc`, a real M
 | `G28` | Lift Z to clearance, then park XY at the clearance position |
 | `M02` | End of program. The firmware also stops the spindle and air |
 
-One tool per file. Makera CAM puts several tools in one file by repeating from `T<n> M6`, with
-`M9` and `M5` before each change; our generators write one file per tool so the user controls each
-step.
+Several tools in one file: Makera CAM repeats from `T<n> M6`, with `M9` and `M5` before each
+change. Our generators write one file per tool; `scripts/combine_gcode.py -o OUT.nc A.nc B.nc ...`
+joins them the same way when nothing has to be done to the stock in between. Consecutive sections
+with the same tool number run on without a tool change. The source files must share one origin.
 
 ## What Makera Studio's preview needs
 
@@ -128,8 +129,9 @@ Both go XY first after a tool change. We follow Makera CAM.
 - every line is one of: `%`, `G90 G21`, `T<n> M6`, `M7`, `M9`, `S<rpm> M3`, `M5`, `G28`, `M02`,
   or a `G0`/`G1` move with X, Y, Z, F words;
 - it starts tool change, XY rapid, spindle on, Z move, and ends `M5`, `G28`, `M02`;
-- there is exactly one tool change, and `M7`/`M9` are both present in the right places or both absent;
-- no Z move comes before the first XY move;
+- every tool change after the first has the spindle stopped before it and goes to a different
+  tool number; `M7` follows a tool change and `M9` is followed by `M5`;
+- no Z move comes before the first XY move, at the start and after every tool change;
 - every sideways rapid starts and ends at or above 2 mm, and no rapid ends below Z0 except
   re-entering a hole already drilled at that XY;
 - every feed move has the spindle on and a feed rate set;
