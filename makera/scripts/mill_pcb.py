@@ -31,7 +31,8 @@ DEFAULTS = {
     "safe_z": 15.0,           # height for the first approach and at the end
     "isolation": {            # V-bit engraving around the copper
         "tool": 2, "tip_dia": 0.2, "angle": 30, "cut_z": -0.06,
-        "passes": 2, "overlap": 20, "feed": 500, "plunge": 200, "rpm": 12000},
+        "passes": 2, "overlap": 20, "feed": 500, "plunge": 200, "rpm": 12000,
+        "plan_width": None},  # plan the paths for a cut this wide when the real cut is wider than the gaps (over-mills)
     "drill": {                # hole sizes that are drilled with a bit of that size
         "first_tool": 4, "dias": [0.4], "cut_z": -1.9, "plunge": 200, "rpm": 10000,
         "peck": 1.0},         # peck depth; 0 drills in one stroke
@@ -39,7 +40,9 @@ DEFAULTS = {
         "tool": 3, "dia": 0.8, "cut_z": -1.8, "depth_per_pass": 0.3,
         "feed": 500, "plunge": 300, "rpm": 12000},
     "cutout": {"tabs": "4", "tab_width": 1.5},
-    "pins": {"enabled": False},  # True: the blank was prepared with stock_prep.py and sits on the bed dowel pins
+    "pins": {
+        "enabled": False,     # True: the blank was prepared with stock_prep.py and sits on the bed dowel pins
+        "origin": "blank"},   # "blank": X0 Y0 at the blank's front-left corner; "anchor1": X0 Y0 at Anchor 1
     "stock": {                # the blank, used when pins are enabled
         "width": 152.0, "height": 152.0,
         "board_offset": None},   # [x, y] of the board outline's bottom-left corner on the blank; None = centred
@@ -88,6 +91,7 @@ def build_tcl(files, cfg, tmp, plan, place):
     iso, drl, mil, cut = cfg["isolation"], cfg["drill"], cfg["mill"], cfg["cutout"]
     tz, sz = cfg["travel_z"], cfg["safe_z"]
     eff = iso["tip_dia"] + 2 * abs(iso["cut_z"]) * math.tan(math.radians(iso["angle"] / 2))
+    plan_w = iso.get("plan_width") or eff
     t = ["set_sys units MM",
          f"open_gerber {q(files['top'])} -outname top",
          f"open_gerber {q(files['bot'])} -outname bot",
@@ -100,7 +104,7 @@ def build_tcl(files, cfg, tmp, plan, place):
         objs += " fmask bmask"
     t += [f'offset {objs} -to "{place["to"][0]:.4f},{place["to"][1]:.4f}" -ref bl',
           'puts "BOUNDS_EDGE [bounds edge]"',
-          f"check_rules -copper_top top -copper_bottom bot -iso {eff:.4f} -csv {q(os.path.join(tmp, 'gaps.csv'))}",
+          f"check_rules -copper_top top -copper_bottom bot -iso {plan_w:.4f} -csv {q(os.path.join(tmp, 'gaps.csv'))}",
           # bottom-side objects are mirrored left to right about the board's vertical centre line
           f"mirror bot -axis X {place['mirror']}"]
     if cfg["mask"]["enabled"]:
@@ -110,7 +114,9 @@ def build_tcl(files, cfg, tmp, plan, place):
     mskjob = (f"-dia {msk['dia']} -z_cut {msk['cut_z']} -z_move {tz} -endz {sz} -feedrate {msk['feed']} "
               f"-feedrate_z {msk['plunge']} -spindlespeed {msk['rpm']} -pp Default_no_M6")
     mskpaint = f"-tooldia {msk['dia']} -overlap {msk['overlap']} -offset 0 -method standard -connect 1 -contour 1"
-    isoargs = (f"-tool_shape V -vtipdia {iso['tip_dia']} -vtipangle {iso['angle']} -cutz {iso['cut_z']} "
+    shape = (f"-dia {plan_w:.4f} " if iso.get("plan_width") else
+             f"-tool_shape V -vtipdia {iso['tip_dia']} -vtipangle {iso['angle']} -cutz {iso['cut_z']} ")
+    isoargs = (shape +
                f"-passes {iso['passes']} -overlap {iso['overlap']} -combine True -iso_type 2 -check_valid True")
     isojob = (f"-z_cut {iso['cut_z']} -z_move {tz} -endz {sz} -feedrate {iso['feed']} -feedrate_z {iso['plunge']} "
               f"-spindlespeed {iso['rpm']} -pp Default_no_M6")
@@ -142,7 +148,7 @@ def build_tcl(files, cfg, tmp, plan, place):
             t += [f"cutout edge -dia {mil['dia']} -margin 0 -gapsize {cut['tab_width']} -gaps {cut['tabs']} "
                   f"-type any -outname g_{key}", f"cncjob g_{key} {miljob} -outname c_{key}"]
         t.append(f"write_gcode c_{key} {out(key)}")
-    return "\n".join(t) + "\n", eff
+    return "\n".join(t) + "\n", eff, plan_w
 
 
 def to_makera(src, dst, title, tool, tooldesc, cfg):
@@ -189,7 +195,7 @@ def to_makera(src, dst, title, tool, tooldesc, cfg):
     if not first_xy or not x:
         sys.exit(f"error: {os.path.basename(src)} has no cutting moves")
     prog = z1.program([title, f"T{tool}-{tooldesc}",
-                       f"Origin: X0 Y0 at the front-left corner of the {cfg['_origin']}, Z0 on the copper surface",
+                       f"Origin: X0 Y0 at {cfg['_origin']}, Z0 on the copper surface",
                        "Made by mill_pcb.py with FlatCAM Evo. Check in a viewer and air-cut before milling."],
                       tool, rpm, body + [f"G0 Z{sz:.4f}"])
     with open(dst, "w") as f:
@@ -218,7 +224,9 @@ def main():
     files = {"top": one(fab, "*F_Cu.gtl"), "bot": one(fab, "*B_Cu.gbl"),
              "edge": one(fab, "*Edge_Cuts.gm1"), "drl": one(fab, "*.drl")}
 
-    cfg = dict(cfg, _origin="blank on the dowel pins" if cfg["pins"]["enabled"] else "board outline")
+    cfg = dict(cfg, _origin=("Anchor 1, with the blank on the dowel pins" if cfg["pins"].get("origin") == "anchor1"
+                             else "front-left corner of the blank on the dowel pins") if cfg["pins"]["enabled"]
+               else "front-left corner of the board outline")
     iso, drl, mil = cfg["isolation"], cfg["drill"], cfg["mill"]
     sizes = drill_sizes(files["drl"])
     drilled = [(d, n) for d, n in sizes if any(abs(d - x) < 1e-6 for x in drl["dias"])]
@@ -244,7 +252,11 @@ def main():
         st = cfg["stock"]
         lay = z1.stock_layout(st["width"], st["height"])
         off = st["board_offset"] or [(st["width"] - bw - lw) / 2, (st["height"] - bh - lw) / 2]
-        place = {"to": (off[0], off[1]), "mirror": f"-origin {st['width'] / 2:.4f},{st['height'] / 2:.4f}"}
+        if pin.get("origin", "blank") not in ("blank", "anchor1"):
+            sys.exit('error: pins.origin must be "blank" or "anchor1"')
+        shift = lay["origin"] if pin.get("origin") == "anchor1" else (0.0, 0.0)
+        place = {"to": (off[0] + shift[0], off[1] + shift[1]),
+                 "mirror": f"-origin {st['width'] / 2 + shift[0]:.4f},{st['height'] / 2 + shift[1]:.4f}"}
         reach = max(mil["dia"], 1.0) + 5.0       # keep cuts this far from the pin centres
         for px, py in lay["pins_stock"]:
             if (off[0] - reach < px < off[0] + bw + lw + reach) and (off[1] - reach < py < off[1] + bh + lw + reach):
@@ -287,7 +299,7 @@ def main():
     for old in glob.glob(os.path.join(outd, "*.nc")):
         os.remove(old)
     with tempfile.TemporaryDirectory() as tmp:
-        tcl, eff = build_tcl(files, cfg, tmp, [(k, kind, arg) for k, kind, arg, *_ in ops], place)
+        tcl, eff, plan_w = build_tcl(files, cfg, tmp, [(k, kind, arg) for k, kind, arg, *_ in ops], place)
         script = os.path.join(tmp, "job.tcl")
         open(script, "w").write(tcl)
         r = subprocess.run([FLATCAM, "--headless", f"--shellfile={script}"], stdin=subprocess.DEVNULL,
@@ -318,10 +330,14 @@ def main():
             results.append((fn, title, tool, desc, ext))
 
     warn = []
+    over = (eff - plan_w) / 2
+    if over > 1e-6:
+        warn.append(f"Over-milling: the paths are planned for a {plan_w:.3f} mm cut but the bit cuts {eff:.3f} mm wide. "
+                    f"Every copper edge loses {over:.3f} mm; a track loses {2 * over:.3f} mm of width.")
     if "Incomplete isolation" in log:
-        warn.append(f"FlatCAM reported incomplete isolation: the {eff:.3f} mm wide cut does not fit through every gap.")
+        warn.append(f"FlatCAM reported incomplete isolation: the {plan_w:.3f} mm planned cut does not fit through every gap.")
     if gaps:
-        warn.append(f"{len(gaps)} copper gaps are narrower than the {eff:.3f} mm isolation cut (listed below). "
+        warn.append(f"{len(gaps)} copper gaps are narrower than the {plan_w:.3f} mm planned isolation cut (listed below). "
                     "Copper stays bridged there unless a finer bit is used or the layout is opened up.")
     w, h = (eb[2] - eb[0], eb[3] - eb[1]) if eb else (None, None)
     for res in results:
@@ -339,12 +355,16 @@ def main():
     if pin["enabled"]:
         st = cfg["stock"]
         (p1, p2), (m1, m2), og = lay["pins_stock"], lay["pins_anchor"], lay["origin"]
-        sheet[6] = ("Work origin: X0 Y0 at the front-left corner of the BLANK as it sits on the bed dowel pins "
-                    f"(Anchor 1 + X {og[0]:g} Y {og[1]:g}), Z0 on the copper surface.")
+        if pin.get("origin") == "anchor1":
+            sheet[6] = ("Work origin: X0 Y0 at ANCHOR 1 (the inner corner of the L-bracket), Z0 on the copper surface. "
+                        f"The blank's front-left corner is at X {og[0]:g} Y {og[1]:g}.")
+        else:
+            sheet[6] = ("Work origin: X0 Y0 at the front-left corner of the BLANK as it sits on the bed dowel pins "
+                        f"(Anchor 1 + X {og[0]:g} Y {og[1]:g}), Z0 on the copper surface.")
         sheet += [f"Blank: {st['width']:g} x {st['height']:g} mm, prepared with stock_prep.py (dowel holes at "
                   f"X {p1[0]:g} Y {p1[1]:g} and X {p2[0]:g} Y {p2[1]:g}), on the bed dowel holes at "
                   f"X {m1[0]:g} Y {m1[1]:g} and X {m2[0]:g} Y {m2[1]:g} from Anchor 1.",
-                  f"Board outline on the blank: X {eb[0]:.2f} to {eb[2]:.2f}, Y {eb[1]:.2f} to {eb[3]:.2f}.",
+                  f"Board outline, from the origin: X {eb[0]:.2f} to {eb[2]:.2f}, Y {eb[1]:.2f} to {eb[3]:.2f}.",
                   "Set the origin once and keep it for every file, on both sides: the pins put the flipped blank "
                   "back in the same place. Do not re-probe after flipping."]
     sheet += ["Run auto-levelling before the isolation files: the cut is only "
@@ -360,7 +380,9 @@ def main():
     sheet += ["Each file starts with M6 T<n>: the machine asks for that tool and measures its length. "
               "It ends with G28: the spindle lifts and parks at the clearance position. "
               "The layout matches Makera CAM's own files, which Makera Studio needs to show a preview.",
-              f"Cutout tabs: {cfg['cutout']['tabs']} (FlatCAM gap pattern), {cfg['cutout']['tab_width']} mm wide, full board thickness.",
+              ("Cutout: NO TABS. The board comes free on the last pass; it must be held down (tape) under its whole area."
+               if str(cfg['cutout']['tabs']).lower() == "none" else
+               f"Cutout tabs: {cfg['cutout']['tabs']} (FlatCAM gap pattern), {cfg['cutout']['tab_width']} mm wide, full board thickness."),
               "", "Settings used:", json.dumps({k: v for k, v in cfg.items() if not k.startswith("_")}, indent=2), ""]
     if warn:
         sheet += ["WARNINGS", "--------"] + [f"- {x}" for x in warn] + [""]
@@ -371,7 +393,8 @@ def main():
                   f"KiCad X {float(g['x']) + ob[0]:.2f} Y {-(float(g['y']) + ob[1]):.2f}   gap {float(g['value']):.3f} mm"
                   for g in gaps[:200]]
     open(os.path.join(outd, f"{name} - Milling Setup.txt"), "w").write("\n".join(sheet) + "\n")
-    print(json.dumps({"out_dir": outd, "files": [r[0] for r in results if isinstance(r, tuple)], "isolation_cut_mm": round(eff, 4),
+    print(json.dumps({"out_dir": outd, "files": [r[0] for r in results if isinstance(r, tuple)], "isolation_cut_mm": round(eff, 4), "planned_cut_mm": round(plan_w, 4),
+                      "overmill_per_edge_mm": round(max(over, 0), 4),
                       "narrow_gaps": len(gaps), "warnings": warn}, indent=2))
 
 

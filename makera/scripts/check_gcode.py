@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check G-code files made by stock_prep.py / mill_pcb.py against what the Makera Z1 accepts.
 
-    python3 check_gcode.py FILE.nc [FILE.nc ...] [--blank 152x152] [--max-depth 2.5]
+    python3 check_gcode.py FILE.nc [FILE.nc ...] [--blank 152x152] [--origin blank|anchor1] [--max-depth 2.5]
 
 Static checks only. It does not simulate material or prove the job is safe:
   - every line is one Makera CAM would write (Makera Studio shows no preview otherwise):
@@ -39,7 +39,7 @@ def kind(s):
     return None
 
 
-def check(path, blank, max_depth, travel=2.0):
+def check(path, blank, max_depth, travel=2.0, anchor=False):
     errs, lines = [], []
     raw_lines = open(path).read().split("\n")
     if raw_lines[0].strip() != "%":
@@ -64,7 +64,9 @@ def check(path, blank, max_depth, travel=2.0):
         errs.append("air: M7 must follow the tool change and M9 must precede M5")
     if codes.count("M6") != 1:
         errs.append("expected exactly one tool change")
-    pins = z1.stock_layout(*blank)["pins_stock"] if blank else []
+    lay = z1.stock_layout(*blank) if blank else None
+    ox, oy = lay["origin"] if (lay and anchor) else (0.0, 0.0)      # where the blank's corner is in file coordinates
+    pins = [(px + ox, py + oy) for px, py in lay["pins_stock"]] if lay else []
     pos = {"X": None, "Y": None, "Z": None}
     spindle = feed = False
     drilled, seen_xy, deepest, ext = set(), False, 0.0, [1e9, 1e9, -1e9, -1e9]
@@ -112,7 +114,7 @@ def check(path, blank, max_depth, travel=2.0):
         pos = new
     if deepest < -max_depth:
         errs.append(f"deepest cut {deepest} mm is beyond {max_depth} mm")
-    if blank and (ext[0] < 0 or ext[1] < 0 or ext[2] > blank[0] or ext[3] > blank[1]):
+    if blank and (ext[0] < ox or ext[1] < oy or ext[2] > ox + blank[0] or ext[3] > oy + blank[1]):
         errs.append(f"cuts leave the blank: X {ext[0]:.2f}..{ext[2]:.2f}, Y {ext[1]:.2f}..{ext[3]:.2f}")
     tool = next((s for _, s in lines if s.endswith("M6")), "?")
     return errs, f"{len(lines)} lines, {tool}, cuts X {ext[0]:.1f}..{ext[2]:.1f} Y {ext[1]:.1f}..{ext[3]:.1f}, deepest Z {deepest:.2f}"
@@ -122,12 +124,14 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("files", nargs="+")
     ap.add_argument("--blank", help="blank size WxH; checks cuts stay on it and clear of the pins")
+    ap.add_argument("--origin", choices=["blank", "anchor1"], default="blank",
+                    help="where X0 Y0 is: the blank's front-left corner, or Anchor 1 with the blank on the dowel pins")
     ap.add_argument("--max-depth", type=float, default=2.5)
     a = ap.parse_args()
     blank = tuple(float(v) for v in a.blank.lower().split("x")) if a.blank else None
     bad = 0
     for f in a.files:
-        errs, info = check(f, blank, a.max_depth)
+        errs, info = check(f, blank, a.max_depth, anchor=(a.origin == "anchor1"))
         print(("FAIL " if errs else "ok   ") + os.path.basename(f) + ": " + info)
         for e in errs[:12]:
             print("       " + e)

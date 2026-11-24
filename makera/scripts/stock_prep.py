@@ -85,8 +85,9 @@ All positions are in machine axes: X to the right, Y to the back.
    - Use the two bed dowel holes at X {m1[0]:g} Y {m1[1]:g} and X {m2[0]:g} Y {m2[1]:g} from Anchor 1
      (see the bed layout drawing): the column of four dowel holes near the middle of the bed,
      skipping the one nearest the front.
-   - The blank's front-left corner is then X {ox:g} Y {oy:g} from Anchor 1. Set the work origin there
-     (Anchor 1 plus that offset, or by probing the blank's corner) and keep it for every board file.
+   - The blank's front-left corner is then X {ox:g} Y {oy:g} from Anchor 1.
+   - Board files use either Anchor 1 or that corner as their origin; each board's setup sheet says which.
+     Set it once and keep it for every board file.
    - The blank then covers X {ox:g} to {ox + a.width:g}, Y {oy:g} to {oy + a.height:g} from Anchor 1, clear of the L-bracket.
 
 3. Flipping

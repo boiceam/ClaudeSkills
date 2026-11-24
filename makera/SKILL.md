@@ -9,8 +9,8 @@ Everything needed to write G-code that the user's Makera Z1 will accept, preview
 PCB milling workflow built on it.
 
 **This skill never runs the machine.** It writes files. The user uploads and runs them from Makera
-Studio. Nothing here has been proven by cutting yet (as of 2026-11-24): say so, and tell the user to
-air-cut a new kind of job first.
+Studio. Only stock prep has been cut so far (2026-11-24, it worked); no board has been milled. Say
+so, and tell the user to air-cut a new kind of job first.
 
 How sure each fact is matters, because a wrong number crashes a bit. The reference files label facts:
 **Makera** (published by Makera or read from its firmware source), **Tested** (confirmed with the
@@ -114,11 +114,15 @@ blank can be flipped left to right and land in the same place.
 ```bash
 python3 <skill-dir>/scripts/stock_prep.py                      # once per blank: two dowel holes
 python3 <skill-dir>/scripts/mill_pcb.py "<KiCad project dir>"  # a board's files, from its Gerbers
-python3 <skill-dir>/scripts/check_gcode.py --blank 152x152 "<project>/outputs/Milling/"*.nc
+python3 <skill-dir>/scripts/check_gcode.py --blank 152x152 --origin anchor1 "<project>/outputs/Milling/"*.nc
 ```
 
+The user's standing choices: work origin at Anchor 1, the 30 deg 0.2 mm engraving bit for all
+isolation (planned with `plan_width`, which over-mills slightly), double-sided tape under the blank
+and so no cutout tabs.
+
 `references/pcb_workflow.md` has the run order, the blank and pin positions, `milling.json`
-settings, bit choice for isolation, FlatCAM Evo, and the limits.
+settings, bit choice and over-milling, FlatCAM Evo, and the limits.
 
 ## Where things live
 
