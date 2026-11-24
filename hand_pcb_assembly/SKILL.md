@@ -20,8 +20,8 @@ python3 <skill-dir>/scripts/assembly_pdf.py <board.kicad_pcb> <bom.csv> [options
 
 ## What it produces
 
-- `<name> hand assembly top.pdf`, and `<name> hand assembly bottom.pdf` if any footprint is on
-  the back. A side with no parts gets no document. Tell the user when there is only one.
+- `<name> - Hand Assembly - Top.pdf`, and `<name> - Hand Assembly - Bottom.pdf` if any footprint
+  is on the back, written to an `outputs` folder beside the board (created if missing). A side with no parts gets no document. Tell the user when there is only one.
 - Landscape US Letter by default (`--paper a4` for A4).
 - Each page: part number large at top left, `Qty N` at top right, the reference designators in
   red beneath, then one line of value, manufacturer and description. Below, the bare board
@@ -51,7 +51,7 @@ python3 <skill-dir>/scripts/assembly_pdf.py <board.kicad_pcb> <bom.csv> [options
 
 | Option | Use |
 |---|---|
-| `--out-dir DIR` | Where the PDFs go. Default is beside the board; write them into the project so the user can open them |
+| `--out-dir DIR` | Where the PDFs go. Default is `outputs/` beside the board, which is the user's convention for generated files |
 | `--name TEXT` | Base file name and page title. Default is the board file name |
 | `--at 'REFS=TARGETS'` | For a BOM line that has no footprint of its own (a module that plugs onto headers, a heatsink, a socketed part), highlight another footprint instead, e.g. `--at 'J6 J7=U3'`. `REFS` must be exactly that line's references |
 | `--note 'REFS=text'` | Adds a bold line to that BOM line's page, e.g. fitting order or orientation |

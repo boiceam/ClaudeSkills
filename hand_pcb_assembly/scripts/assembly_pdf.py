@@ -106,7 +106,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("pcb", help=".kicad_pcb file (read only)")
     ap.add_argument("bom", help="BOM CSV, one row per line item, with a reference-designator column")
-    ap.add_argument("--out-dir", help="where to write the PDFs (default: next to the board)")
+    ap.add_argument("--out-dir", help="where to write the PDFs (default: an 'outputs' folder beside the board)")
     ap.add_argument("--name", help="base name for the PDFs and page title (default: board file name)")
     ap.add_argument("--paper", choices=sorted(PAPER), default="letter")
     ap.add_argument("--map", nargs="*", default=[], help="BOM column overrides, e.g. refs=Designator mpn='Mfr Part' qty=Qty")
@@ -126,7 +126,7 @@ def main():
     cli, kpy, rsvg = find_tools()
     here = os.path.dirname(os.path.abspath(__file__))
     name = a.name or os.path.splitext(os.path.basename(a.pcb))[0]
-    out_dir = os.path.abspath(a.out_dir or os.path.dirname(os.path.abspath(a.pcb)))
+    out_dir = os.path.abspath(a.out_dir or os.path.join(os.path.dirname(os.path.abspath(a.pcb)), "outputs"))
     os.makedirs(out_dir, exist_ok=True)
     overrides = dict(m.split("=", 1) for m in a.map)
     bom, cols = read_bom(a.bom, overrides)
@@ -275,7 +275,7 @@ def main():
         if not svgs:
             result["warnings"].append("Parts are on the %s side but no BOM line places any there." % sname)
             continue
-        pdf = os.path.join(out_dir, "%s hand assembly %s.pdf" % (name, sname))
+        pdf = os.path.join(out_dir, "%s - Hand Assembly - %s.pdf" % (name, sname.capitalize()))
         rr = run([rsvg, "-f", "pdf", "-o", pdf] + svgs)
         if rr.returncode != 0:
             fail("rsvg-convert failed.", rr.stderr[-600:])
@@ -283,7 +283,7 @@ def main():
         if a.preview:
             info["previews"] = []
             for p in svgs[:a.preview]:
-                png = os.path.join(out_dir, "%s hand assembly %s %s.png" % (name, sname, os.path.basename(p)[2:-4]))
+                png = os.path.join(out_dir, "%s - Hand Assembly - %s %s.png" % (name, sname.capitalize(), os.path.basename(p)[2:-4]))
                 run([rsvg, "-w", "1700", "-o", png, p]); info["previews"].append(png)
         if a.keep_svg:
             d = os.path.join(out_dir, "%s assembly svg" % name)
