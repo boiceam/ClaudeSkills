@@ -66,8 +66,10 @@ writes numbered files and `<Project> - Milling Setup.txt` to `<project>/outputs/
 | Order | File | Side up | Tool |
 |---|---|---|---|
 | 1 | `top_isolation` | Top | T2 engraving bit |
+| | `top_copper_clear` (only with `clear`) | Top | T2 |
 | | Flip | | |
 | 2 | `bottom_isolation` | Bottom | T2 |
+| | `bottom_copper_clear` (only with `clear`) | Bottom | T2 |
 | | Take off, apply and cure UV solder mask on both sides, refit bottom up | | |
 | 3 | `bottom_mask_removal` | Bottom | T5 |
 | | Flip | | |
@@ -79,6 +81,14 @@ writes numbered files and `<Project> - Milling Setup.txt` to `<project>/outputs/
 - Steps 4 to 7 need nothing done to the blank between them, so they can be joined into one file
   with `combine_gcode.py` (the user asked for this on the Moby Tester). `mill_pcb.py` deletes every
   `.nc` in the output folder when it regenerates, so re-run the combine afterwards.
+- **Isolation only cuts a line around each conductor. It does not remove the copper anywhere
+  else.** A milled board keeps copper everywhere the design has none, on both sides, as isolated
+  islands. Where that matters (under an antenna, between high-voltage nets), turn on `clear`: it
+  rubs out the copper inside the board's copper keep-out areas, on each side the keep-out covers,
+  with the isolation bit at the isolation depth. The areas are read from the `.kicad_pcb` (rule
+  areas that forbid copper fill, including ones inside footprints) using KiCad's Python and
+  `scripts/kicad_keepouts.py`, or given as `clear.areas`. Found on the Moby Tester 2026-11-24: the
+  Pico W antenna keep-out was left full of copper after isolation.
 - Holes and the cutout are last so the mask does not fill them and the board stays attached to
   the blank through both flips.
 - The origin is Anchor 1 or the blank's front-left corner (pins enabled, see `pins.origin`), or the
@@ -102,6 +112,7 @@ Makera's tool numbers. A project's `milling.json` holds only what differs. The M
   "drill": {"dias": [0.4, 1.0]},
   "mill": {"dia": 1.0},
   "cutout": {"tabs": "None"},
+  "clear": {"enabled": true},
   "pins": {"enabled": true, "origin": "anchor1"},
   "stock": {"width": 152.0, "height": 152.0, "board_offset": null},
   "mask": {"enabled": true}
@@ -115,6 +126,8 @@ Makera's tool numbers. A project's `milling.json` holds only what differs. The M
 | `drill.dias` | Hole sizes drilled with a bit of exactly that size. Everything else is milled |
 | `drill.peck` | Peck depth, default 1.0; 0 for one stroke |
 | `mill` | Corn bit diameter, depth, depth per pass |
+| `clear.enabled` | Add the copper clearing files for the board's copper keep-out areas |
+| `clear.areas` | Optional. Areas to clear instead of reading the board: `[{"top": true, "bottom": true, "pts": [[x, y], ...]}]` in KiCad millimetres |
 | `cutout` | Tab pattern (FlatCAM's: `None`, `4`, `2LR`, `2TB`, `8`, ...) and tab width. The user holds the blank with double-sided tape and uses `None` |
 | `pins.enabled` | The blank was prepared with `stock_prep.py` and is on the dowel pins |
 | `pins.origin` | `"anchor1"` or `"blank"` (default) |

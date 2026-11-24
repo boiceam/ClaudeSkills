@@ -22,6 +22,24 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import makera_z1 as z1
 
 FLATCAM = os.environ.get("FLATCAM", "/Applications/FlatCAM_EVO.app/Contents/MacOS/FlatCAM")
+KICAD_PYTHON = os.environ.get("KICAD_PYTHON", "/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/"
+                                              "Versions/3.9/bin/python3")
+
+
+def keepouts(proj):
+    """Copper keep-out areas of the project's board, in KiCad millimetres (see kicad_keepouts.py)."""
+    boards = glob.glob(os.path.join(proj, "*.kicad_pcb"))
+    if len(boards) != 1:
+        sys.exit(f"error: clear: expected one .kicad_pcb in {proj}, found {len(boards)}; give clear.areas instead")
+    if not os.path.exists(KICAD_PYTHON):
+        sys.exit(f"error: clear: KiCad's Python not found at {KICAD_PYTHON} (set KICAD_PYTHON), or give clear.areas")
+    helper = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kicad_keepouts.py")
+    r = subprocess.run([KICAD_PYTHON, os.path.realpath(helper), boards[0]], stdin=subprocess.DEVNULL,
+                       capture_output=True, text=True)
+    m = re.search(r"^KEEPOUTS (.*)$", r.stdout, re.M)
+    if not m:
+        sys.exit("error: clear: could not read keep-outs from the board:\n" + r.stderr[-500:])
+    return json.loads(m.group(1))
 
 DEFAULTS = {
     "machine": "Makera Z1",
@@ -40,6 +58,9 @@ DEFAULTS = {
         "tool": 3, "dia": 0.8, "cut_z": -1.8, "depth_per_pass": 0.3,
         "feed": 500, "plunge": 300, "rpm": 12000},
     "cutout": {"tabs": "4", "tab_width": 1.5},
+    "clear": {                # rub out the copper inside the board's copper keep-out areas (e.g. under an antenna)
+        "enabled": False, "overlap": 30,   # cut with the isolation bit, at the isolation depth and feeds
+        "areas": None},       # None: read the keep-outs from the .kicad_pcb; or [{"top":bool,"bottom":bool,"pts":[[x,y],..]}] in KiCad mm
     "pins": {
         "enabled": False,     # True: the blank was prepared with stock_prep.py and sits on the bed dowel pins
         "origin": "blank"},   # "blank": X0 Y0 at the blank's front-left corner; "anchor1": X0 Y0 at Anchor 1
@@ -99,6 +120,12 @@ def build_tcl(files, cfg, tmp, plan, place):
          f"open_excellon {q(files['drl'])} -outname drl",
          'puts "BOUNDS_ORIG [bounds edge]"']
     objs = "top bot edge drl"
+    for side in ("t", "b"):
+        polys = [k["pts"] for k in cfg["clear"].get("_areas", []) if k["top" if side == "t" else "bottom"]]
+        if polys:
+            t.append(f"new_geometry keep_{side}")
+            t += [f"add_polygon keep_{side} " + " ".join(f"{x:.4f} {-y:.4f}" for x, y in p) for p in polys]
+            objs += f" keep_{side}"
     if cfg["mask"]["enabled"]:
         t += [f"open_gerber {q(files['fmask'])} -outname fmask", f"open_gerber {q(files['bmask'])} -outname bmask"]
         objs += " fmask bmask"
@@ -109,6 +136,8 @@ def build_tcl(files, cfg, tmp, plan, place):
           f"mirror bot -axis X {place['mirror']}"]
     if cfg["mask"]["enabled"]:
         t.append(f"mirror bmask -axis X {place['mirror']}")
+    if "keep_b" in objs:
+        t.append(f"mirror keep_b -axis X {place['mirror']}")
     t.append('puts "BOUNDS_BOT [bounds bot]"')
     msk = cfg["mask"]
     mskjob = (f"-dia {msk['dia']} -z_cut {msk['cut_z']} -z_move {tz} -endz {sz} -feedrate {msk['feed']} "
@@ -139,6 +168,10 @@ def build_tcl(files, cfg, tmp, plan, place):
                   f"cncjob g_{key} {miljob} -outname c_{key}"]
         elif kind in ("flip", "note"):
             continue
+        elif kind in ("clear_top", "clear_bot"):
+            src = "keep_t" if kind == "clear_top" else "keep_b"
+            t += [f"paint {src} -tooldia {eff:.4f} -overlap {cfg['clear']['overlap']} -offset 0 -method standard "
+                  f"-connect 1 -contour 1 -outname g_{key}", f"cncjob g_{key} {isojob} -outname c_{key}"]
         elif kind in ("mask_top", "mask_bot"):
             src = "fmask" if kind == "mask_top" else "bmask"
             t += [f"paint {src} {mskpaint} -outname g_{key}", f"cncjob g_{key} {mskjob} -outname c_{key}"]
@@ -267,9 +300,22 @@ def main():
                 if pin["enabled"] else
                 "Flip the board left to right and re-register so the bottom-left corner of the outline is X0 Y0.")
     ops = []
+    clr = cfg["clear"]
+    if clr["enabled"]:
+        clr["_areas"] = clr["areas"] if clr["areas"] is not None else keepouts(proj)
+        if not clr["_areas"]:
+            sys.exit("error: clear is enabled but the board has no copper keep-out areas")
+    has = lambda side: clr["enabled"] and any(k[side] for k in clr["_areas"])
+    names = lambda side: ", ".join(sorted({k.get("name") or "keep-out" for k in clr["_areas"] if k[side]}))
     ops.append(("top_isolation", "iso_top", None, "Top copper isolation", iso["tool"], isodesc))
+    if has("top"):
+        ops.append(("top_copper_clear", "clear_top", None, f"Remove the copper in: {names('top')} (top side)",
+                    iso["tool"], isodesc))
     ops.append(("FLIP", "flip", None, flipnote + " Bottom side is now up.", None, None))
     ops.append(("bottom_isolation", "iso_bot", None, "Bottom copper isolation (bottom side up)", iso["tool"], isodesc))
+    if has("bottom"):
+        ops.append(("bottom_copper_clear", "clear_bot", None, f"Remove the copper in: {names('bottom')} (bottom side up)",
+                    iso["tool"], isodesc))
     if msk["enabled"]:
         mskdesc = f"Solder mask removal tool, {msk['dia']} mm tip, pressed {abs(msk['cut_z'])} mm (spring-loaded)"
         ops.append(("MASK", "note", None, "Take the blank off. Apply the UV solder mask to both sides and cure it. "

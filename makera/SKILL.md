@@ -120,6 +120,9 @@ python3 <skill-dir>/scripts/check_gcode.py --blank 152x152 --origin anchor1 "<pr
 python3 <skill-dir>/scripts/combine_gcode.py -o combined.nc step4.nc step5.nc ...   # optional: one file, several tools
 ```
 
+Isolation only outlines each conductor; all other copper stays on the board. Where copper must be
+gone (antenna keep-outs), enable `clear` in `milling.json`.
+
 The user's standing choices: work origin at Anchor 1, the 30 deg 0.2 mm engraving bit for all
 isolation (planned with `plan_width`, which over-mills slightly), double-sided tape under the blank
 and so no cutout tabs.
