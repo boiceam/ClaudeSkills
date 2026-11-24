@@ -12,15 +12,19 @@ above with the front of the machine at the bottom.
 
 - 206 x 206 mm: an aluminium base under a 6 mm MDF bed. (Community)
 - Travel 200 x 200 x 100 mm. (Makera product page)
-- The bed spans X and Y from -15 to +191. (Inferred, from the Anchor 1 position)
+- The bed spans X and Y from -15 to +191. (From the Anchor 1 position)
 
 ## Anchor 1
 
 The inner corner of the L-bracket, at the front-left. The firmware names it `anchor1` and places
 the tool setter relative to it. (Makera)
 
-Its position on the bed drawing is **Inferred**: (88, 88) in the drawing's centre-origin
-coordinates, with machine +X and +Y pointing to the drawing's -X and -Y. Three things agree:
+Its position on the bed drawing is (88, 88) in the drawing's centre-origin coordinates, with
+machine +X and +Y pointing to the drawing's -X and -Y. **Tested 2026-11-24:** the user confirmed
+Makera's Anchor 1 is the L-bracket's inner corner, and a blank drilled at Anchor 1 + (76, 28.5) and
+(76, 123.5) dropped onto pins in the bed holes at (95, 50) and (95, 145) as predicted. That
+confirms the anchor position, the axis directions and those two holes; the other holes are still
+from the drawing only. It was first worked out from three things that agree:
 
 1. The L-bracket model is 15 mm wide on a 103 mm half-bed, putting its inner edge at 88.
 2. The bracket's screw and dowel holes line up with the drawing's holes along those two edges.
@@ -76,6 +80,6 @@ Several of these are under the L-bracket or the tool setter corner; check the dr
 
 ## Not yet verified
 
-- The Anchor 1 position, and so every number in this file measured from it.
+- Bed holes other than (95, 50) and (95, 145): from the community drawing, not yet used.
 - The tool setter's size and the clearance to stock near the back-right corner.
 - Which bed version the user's machine has (the drawing matches the dark grey MDF bed).

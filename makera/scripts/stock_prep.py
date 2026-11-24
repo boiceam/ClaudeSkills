@@ -98,9 +98,8 @@ Notes
    - Each file ends with G28, which lifts the spindle and parks it at the machine's clearance position.
    - The pins must not stand higher than the safe height of the board files ({a.safe_z:g} mm above the blank).
    - Keep the board at least 6 mm clear of both pin centres. The board has to fit between or beside the pins.
-   - The bed hole positions are from a community reference drawing and the Anchor 1 position is inferred
-     from it and the firmware (see makera_z1.py). Before milling a board, check that the pins drop
-     through the prepared blank into the bed, and that the corner lands where this sheet says.
+   - For 152 x 152 mm blanks this layout was confirmed on the machine on 2026-11-24. For any other
+     blank size, check that the pins drop through the prepared blank into the bed before milling a board.
 """
     open(base + " - Setup.txt", "w").write(sheet)
 
@@ -126,7 +125,7 @@ Notes
     s += [f'<text x="{ox + 3}" y="{-(oy + a.height) + 8}" font-size="4.6" fill="#2e7d32">blank {a.width:g} x {a.height:g}; front-left corner X {ox:g} Y {oy:g} = work origin</text>',
           f'<text x="{lo}" y="{-lo + 10}" font-size="4.6">Makera Z1 bed seen from above, front of the machine at the bottom. Millimetres from Anchor 1.</text>',
           f'<text x="{lo}" y="{-lo + 17}" font-size="4.6">Dark dots: 4 mm dowel holes. Red: the two used. Open circles: M5 screws. Dashed: flip axis.</text>',
-          f'<text x="{lo}" y="{-lo + 24}" font-size="4.6">Hole positions from a community drawing; Anchor 1 position inferred. Check on the machine.</text>',
+          f'<text x="{lo}" y="{-lo + 24}" font-size="4.6">Hole positions from a community drawing. Anchor 1 and the two red holes confirmed on the machine.</text>',
           '</svg>']
     svg = base + " - Bed Layout.svg"
     open(svg, "w").write("\n".join(s))

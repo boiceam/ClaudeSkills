@@ -99,7 +99,7 @@ cutting lengths, the V-bit width formula, the user's own bit inventory, and wher
 
 - 206 mm square bed, 200 x 200 x 100 mm travel. X to the right, Y to the back.
 - **Anchor 1** is the inner corner of the L-bracket at the front-left. Positions in this skill are
-  millimetres from Anchor 1. Its place on the bed is Inferred.
+  millimetres from Anchor 1. Its place on the bed was worked out, then confirmed on the machine.
 - The tool setter is at Anchor 1 + (181, 181). Keep stock and clamps away from it.
 - The bed has 17 dowel holes for 4 mm pins and 36 M5 screw positions.
 

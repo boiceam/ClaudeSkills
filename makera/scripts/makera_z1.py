@@ -7,16 +7,18 @@ community reference files (github.com/cinetronixlabs/makera-z1-bed-cad-files, v1
 credit: cinetronix), which their author checked against a Z1 and Makera's Z1-MDF-v2.1 STEP file.
 
 ANCHOR 1 (the inner corner of the L-bracket, the machine's corner origin) is at (88, 88) in that
-drawing, and machine +X / +Y point towards the drawing's -X / -Y. This is inferred, not published:
+drawing, and machine +X / +Y point towards the drawing's -X / -Y. Confirmed on the user's machine
+2026-11-24 (a blank drilled from Anchor 1 dropped onto pins in the bed holes at (95, 50) and (95, 145)).
+It was first worked out, since it is not published:
 the L-bracket is 15 mm wide on a 103 mm half-bed (inner edge at 88), its screw and dowel holes match
 the drawing's holes along the +X and +Y edges, and the Z1 firmware measures tool length at
 Anchor 1 + (181, 181), which is the drawing's 10 mm corner hole at (-93, -93).
-Verify on the machine before relying on it.
+Bed holes other than those two are from the drawing only.
 """
 import re
 
 BED_HALF = 103.0
-ANCHOR1 = (88.0, 88.0)             # drawing coordinates of Anchor 1 (inferred, see above)
+ANCHOR1 = (88.0, 88.0)             # drawing coordinates of Anchor 1 (confirmed, see above)
 TOOL_SETTER_FROM_ANCHOR = (181.0, 181.0)   # from the Z1 firmware (ATCHandler.cpp)
 # 4.0 mm dowel holes in the aluminium base (5.0 mm clearance holes through the MDF bed above them)
 DOWELS = [(-95.5, 7), (-57, -7), (-57, 38), (-57, 83), (-7, -57), (-7, -7), (-7, 38), (-7, 83), (7, 95.5),

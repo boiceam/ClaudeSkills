@@ -178,7 +178,8 @@ them through `makera_z1.program()`.
 ## Limits and unverified points
 
 - Nothing has been cut. The files preview in Makera Studio, which shows the path, not the result.
-- The Anchor 1 position is inferred; so are the pin and origin numbers built on it.
+- Confirmed on the machine (2026-11-24): Anchor 1, the pin holes at (95, 50) and (95, 145), and the
+  blank position on them. Other blank sizes would use other bed holes, which are not yet tried.
 - Bed pockets (dowel clearance holes, M5 counterbores) lie under the board area. The 0.07 mm
   isolation cut may vary over them.
 - Mask removal settings are Makera's numbers, untried on real cured mask.
