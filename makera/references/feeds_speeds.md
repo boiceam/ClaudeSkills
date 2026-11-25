@@ -17,6 +17,10 @@ Format below: spindle rpm / feed mm/min / plunge mm/min / depth of cut mm.
 | Drill, 0.2 to 3.175 mm | 10000 / n/a / 200 / 1.0 | Read 1.0 as a peck depth |
 | UV solder mask removal tool, 0.3 mm tip | 6000 / 400 / 200 / 0.2 | Spring-loaded: 0.2 is how far it is pressed. Stepover 0.2 mm |
 
+- Mask removal, from use (2026-11-24, Moby Tester bottom side): at Makera's 6000 rpm / 400 mm/min one pass
+  did not clear all the cured mask; it took three runs. The Moby Tester's `milling.json` now sets
+  `"mask": {"feed": 200, "rpm": 3000}` (half of each, plunge unchanged). Not yet tried; if one pass
+  clears the mask, make it the default in `mill_pcb.py`.
 - The plain (non-metal) "Single Flute Engraving Bit" has no PCB entry. Only the "for Metal" one does.
 - Drill plunge: the product page says 200 for PCB; the Fusion library says 100, in a preset
   shared with aluminium and copper. Use 200; drop to 100 if small drills break.

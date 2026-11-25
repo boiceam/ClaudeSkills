@@ -33,7 +33,7 @@ def keepouts(proj):
         sys.exit(f"error: clear: expected one .kicad_pcb in {proj}, found {len(boards)}; give clear.areas instead")
     if not os.path.exists(KICAD_PYTHON):
         sys.exit(f"error: clear: KiCad's Python not found at {KICAD_PYTHON} (set KICAD_PYTHON), or give clear.areas")
-    helper = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kicad_keepouts.py")
+    helper = os.path.join(os.path.dirname(os.path.realpath(__file__)), "kicad_keepouts.py")
     r = subprocess.run([KICAD_PYTHON, os.path.realpath(helper), boards[0]], stdin=subprocess.DEVNULL,
                        capture_output=True, text=True)
     m = re.search(r"^KEEPOUTS (.*)$", r.stdout, re.M)
