@@ -19,8 +19,9 @@ Format below: spindle rpm / feed mm/min / plunge mm/min / depth of cut mm.
 
 - Mask removal, from use (2026-11-24, Moby Tester bottom side): at Makera's 6000 rpm / 400 mm/min one pass
   did not clear all the cured mask; it took three runs. The Moby Tester's `milling.json` now sets
-  `"mask": {"feed": 200, "rpm": 3000}` (half of each, plunge unchanged). Not yet tried; if one pass
-  clears the mask, make it the default in `mill_pcb.py`.
+  `"mask": {"feed": 200, "passes": 2}`: 6000 rpm, half the feed, and every opening covered twice
+  (`passes` runs each path forward, then back along itself, without lifting). Not yet tried; if it
+  clears the mask in one run, make it the default in `mill_pcb.py`.
 - The plain (non-metal) "Single Flute Engraving Bit" has no PCB entry. Only the "for Metal" one does.
 - Drill plunge: the product page says 200 for PCB; the Fusion library says 100, in a preset
   shared with aluminium and copper. Use 200; drop to 100 if small drills break.

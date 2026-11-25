@@ -70,7 +70,8 @@ DEFAULTS = {
     "mask": {                 # solder mask removal over the mask openings
         "enabled": False, "tool": 5, "dia": 0.3, "overlap": 33,   # 0.2 mm stepover, as Makera's Fusion preset
         "cut_z": -0.2,        # how far the spring-loaded tool is pressed down, not a cut into the board
-        "feed": 400, "plunge": 200, "rpm": 6000},
+        "feed": 400, "plunge": 200, "rpm": 6000,
+        "passes": 1},         # 2 = go over every opening twice: each path is run forward, then back along itself
 }
 
 
@@ -184,7 +185,46 @@ def build_tcl(files, cfg, tmp, plan, place):
     return "\n".join(t) + "\n", eff, plan_w
 
 
-def to_makera(src, dst, title, tool, tooldesc, cfg):
+def repeat_cuts(body, passes):
+    """Run every cut `passes` times without lifting: forward, then back along the same points, and so on.
+
+    A cut is the G1 moves between a plunge (G1 Z below 0) and the next G0. Retracing the path keeps the
+    tool on ground it has already covered, whether or not the path is closed."""
+    out, cut, start, pos = [], None, None, [None, None]
+    for line in body:
+        xy = [re.search(a + r"(-?[\d.]+)", line) for a in "XY"]
+        if cut is None:
+            out.append(line)
+            if re.match(r"G1 Z-", line):
+                cut, start = [], tuple(pos)
+            for i in (0, 1):
+                if xy[i]:
+                    pos[i] = xy[i].group(1)
+            continue
+        if line.startswith("G1") and (xy[0] or xy[1]) and "Z" not in line:
+            for i in (0, 1):
+                if xy[i]:
+                    pos[i] = xy[i].group(1)
+            cut.append(tuple(pos))
+            out.append(line)
+            continue
+        if re.fullmatch(r"G1 F[\d.]+", line):
+            out.append(line)                                      # the cutting feed, set after the plunge
+            continue
+        if not line.startswith("G0"):
+            sys.exit(f"error: cannot repeat a cut that contains: {line}")
+        pts = [start] + cut
+        for n in range(1, passes):
+            for x, y in (pts[-2::-1] if n % 2 else pts[1:]):
+                out.append(f"G1 X{x} Y{y}")
+        out.append(line)
+        cut = None
+    if cut is not None:
+        sys.exit("error: the last cut has no retract")
+    return out
+
+
+def to_makera(src, dst, title, tool, tooldesc, cfg, passes=1):
     """Rewrite FlatCAM G-code for the Z1 (framing as in makera_z1.py) and return its extents."""
     tz, sz = cfg["travel_z"], cfg["safe_z"]
     lines, rpm = [], None
@@ -227,6 +267,8 @@ def to_makera(src, dst, title, tool, tooldesc, cfg):
             x.append(pos["X"]); y.append(pos["Y"]); z.append(pos["Z"])
     if not first_xy or not x:
         sys.exit(f"error: {os.path.basename(src)} has no cutting moves")
+    if passes > 1:
+        body = repeat_cuts(body, passes)
     prog = z1.program([title, f"T{tool}-{tooldesc}",
                        f"Origin: X0 Y0 at {cfg['_origin']}, Z0 on the copper surface",
                        "Made by mill_pcb.py with FlatCAM Evo. Check in a viewer and air-cut before milling."],
@@ -317,7 +359,8 @@ def main():
         ops.append(("bottom_copper_clear", "clear_bot", None, f"Remove the copper in: {names('bottom')} (bottom side up)",
                     iso["tool"], isodesc))
     if msk["enabled"]:
-        mskdesc = f"Solder mask removal tool, {msk['dia']} mm tip, pressed {abs(msk['cut_z'])} mm (spring-loaded)"
+        mskdesc = (f"Solder mask removal tool, {msk['dia']} mm tip, pressed {abs(msk['cut_z'])} mm (spring-loaded)"
+                   + (f", {msk['passes']} passes over each opening" if msk.get("passes", 1) > 1 else ""))
         ops.append(("MASK", "note", None, "Take the blank off. Apply the UV solder mask to both sides and cure it. "
                     "Keep the dowel holes clear. Refit the blank bottom side up.", None, None))
         ops.append(("bottom_mask_removal", "mask_bot", None, "Remove solder mask over the bottom pads (bottom side up)",
@@ -372,7 +415,8 @@ def main():
             if not os.path.exists(src):
                 sys.exit(f"error: FlatCAM did not write {key}; see flatcam.log")
             fn = f"{step} - {key}.nc"
-            ext = to_makera(src, os.path.join(outd, fn), f"{name} - {title}", tool, desc, cfg)
+            ext = to_makera(src, os.path.join(outd, fn), f"{name} - {title}", tool, desc, cfg,
+                            passes=cfg["mask"].get("passes", 1) if kind.startswith("mask_") else 1)
             results.append((fn, title, tool, desc, ext))
 
     warn = []

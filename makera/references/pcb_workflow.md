@@ -133,6 +133,7 @@ Makera's tool numbers. A project's `milling.json` holds only what differs. The M
 | `pins.origin` | `"anchor1"` or `"blank"` (default) |
 | `stock` | Blank size, and `board_offset` [x, y] of the board on it; `null` centres it |
 | `mask.enabled` | Add the two mask removal files |
+| `mask.passes` | Times each mask opening is covered (default 1). 2 runs each path forward, then back along itself, without lifting |
 
 The board must stay at least 6 mm from both pin centres and inside the blank; the tool stops with
 an error otherwise. With the pins 95 mm apart a centred board can be about 83 mm tall.
@@ -198,6 +199,7 @@ them through `makera_z1.program()`.
   blank position on them. Other blank sizes would use other bed holes, which are not yet tried.
 - Bed pockets (dowel clearance holes, M5 counterbores) lie under the board area. The 0.07 mm
   isolation cut may vary over them.
-- Mask removal settings are Makera's numbers, untried on real cured mask.
+- Mask removal at Makera's numbers needed three runs on real cured mask; see `feeds_speeds.md` for the
+  slower two-pass setting being tried.
 - The dowel hole fit and the rivet fit are untried.
 - There is no simulation of material removal anywhere in this workflow.
