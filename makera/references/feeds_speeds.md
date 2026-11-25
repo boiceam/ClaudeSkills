@@ -19,7 +19,8 @@ Format below: spindle rpm / feed mm/min / plunge mm/min / depth of cut mm.
 
 - Mask removal, from use (2026-11-24, Moby Tester bottom side): at Makera's 6000 rpm / 400 mm/min one pass
   did not clear all the cured mask; it took three runs. The Moby Tester's `milling.json` now sets
-  `"mask": {"feed": 200, "passes": 2}`: 6000 rpm, half the feed, and every opening covered twice
+  `"mask": {"feed": 200, "passes": 2, "cut_z": -0.3}`: 6000 rpm, half the feed, pressed 0.3 mm
+  instead of 0.2 (spring travel of the tool not checked), and every opening covered twice
   (`passes` runs each path forward, then back along itself, without lifting). Not yet tried; if it
   clears the mask in one run, make it the default in `mill_pcb.py`.
 - The plain (non-metal) "Single Flute Engraving Bit" has no PCB entry. Only the "for Metal" one does.
